@@ -48,6 +48,8 @@ class Bootcamp(ProgramaAcademico):
 
 
 def obtener_instancia_programa(tipo_str):
+    if not tipo_str:
+        return None
     tipo = tipo_str.strip().lower()
     if tipo == "curso":
         return Curso()
@@ -124,7 +126,7 @@ class SistemaGestionSGA:
         self.pila_acciones_notas = []
         self.cargar_datos()
 
-    # --- PERSISTENCIA Y CARGA DE ARCHIVOS ---
+    # --- PERSISTENCIA Y CARGA DE ARCHIVOS CORREGIDA ---
     def cargar_datos(self):
         self.alumnos.clear()
         self.profesores.clear()
@@ -142,15 +144,12 @@ class SistemaGestionSGA:
                         programa_obj = obtener_instancia_programa(tipo_prog)
                         alumno = Alumno(cedula, nombre, correo, programa_obj)
                         
-                        # Cargar notas si existen
-                        notas_raw = partes[4:]
-                        for n in notas_raw:
+                        # Cargar únicamente notas reales si están presentes en el archivo
+                        for n in partes[4:]:
                             try:
                                 val = float(n)
-                                if val > 0 or len(alumno.notas) < 3:
-                                    # Si vienen 0s de relleno o notas reales
-                                    if len(alumno.notas) < 3:
-                                        alumno.notas.append(val)
+                                if len(alumno.notas) < 3:
+                                    alumno.notas.append(val)
                             except ValueError:
                                 pass
                         self.alumnos.append(alumno)
@@ -172,35 +171,47 @@ class SistemaGestionSGA:
         with open("alumnos.txt", "w", encoding="utf-8") as f:
             for a in self.alumnos:
                 prog_nombre = a.programa_academico.nombre_programa if a.programa_academico else "Curso"
-                # Formatear las 3 notas (rellenar con 0 si faltan)
-                notas_list = [int(n) if n.is_integer() else n for n in a.notas]
-                while len(notas_list) < 3:
-                    notas_list.append(0)
-                notas_str = ",".join(map(str, notas_list[:3]))
-                f.write(f"{a._cedula},{a._nombre_completo},{a._correo_electronico},{prog_nombre},{notas_str}\n")
+                linea = f"{a._cedula},{a._nombre_completo},{a._correo_electronico},{prog_nombre}"
+                if a.notas:
+                    notas_str = ",".join(str(int(n) if n.is_integer() else n) for n in a.notas)
+                    linea += f",{notas_str}"
+                f.write(linea + "\n")
 
     def guardar_profesores(self):
         with open("profesores.txt", "w", encoding="utf-8") as f:
             for p in self.profesores:
                 f.write(f"{p._cedula},{p._nombre_completo},{p._correo_electronico},{p.especialidad},{p.materia}\n")
 
-    # --- OPCIONES DEL MENÚ ---
+    # --- OPCIONES DEL MENÚ CON VALIDACIONES ---
     def registrar_alumno(self):
         print("\n--- 1. Registrar Alumno ---")
         cedula = input("Cédula: ").strip()
+        
+        # Validación de cédula repetida
+        if any(a._cedula == cedula for a in self.alumnos):
+            print(f" [ERROR] Ya existe un alumno registrado con la cédula {cedula}.")
+            return
+
         nombre = input("Nombre Completo: ").strip()
         correo = input("Correo Electrónico: ").strip()
-        print("Tipo de Programa (1: Curso, 2: Diplomado, 3: Bootcamp): ")
-        op_prog = input("Seleccione opción: ").strip()
         
-        if op_prog == "1":
-            prog = Curso()
-        elif op_prog == "2":
-            prog = Diplomado()
-        elif op_prog == "3":
-            prog = Bootcamp()
-        else:
-            prog = obtener_instancia_programa(op_prog) or Curso()
+        # Validación estricta del tipo de programa (sin asumir por defecto)
+        prog = None
+        while prog is None:
+            print("Seleccione Tipo de Programa:")
+            print("  1. Curso")
+            print("  2. Diplomado")
+            print("  3. Bootcamp")
+            op_prog = input("Ingrese opción (1/2/3): ").strip()
+            
+            if op_prog == "1":
+                prog = Curso()
+            elif op_prog == "2":
+                prog = Diplomado()
+            elif op_prog == "3":
+                prog = Bootcamp()
+            else:
+                print(" [ERROR] Opción inválida. Debe seleccionar 1, 2 o 3.")
 
         nuevo_alumno = Alumno(cedula, nombre, correo, prog)
         self.alumnos.append(nuevo_alumno)
@@ -210,6 +221,12 @@ class SistemaGestionSGA:
     def registrar_profesor(self):
         print("\n--- 2. Registrar Profesor ---")
         cedula = input("Cédula: ").strip()
+        
+        # Validación de cédula repetida para profesores
+        if any(p._cedula == cedula for p in self.profesores):
+            print(f" [ERROR] Ya existe un profesor registrado con la cédula {cedula}.")
+            return
+
         nombre = input("Nombre Completo: ").strip()
         correo = input("Correo Electrónico: ").strip()
         especialidad = input("Especialidad: ").strip()
@@ -237,7 +254,6 @@ class SistemaGestionSGA:
             nota = float(input(f"Ingrese calificación para {alumno._nombre_completo} (0-20): "))
             if 0 <= nota <= 20:
                 alumno.agregar_nota(nota)
-                # Guardar en la PILA para función Deshacer (LIFO)
                 self.pila_acciones_notas.append((alumno._cedula, nota))
                 self.guardar_alumnos()
                 print(f" Nota {nota} agregada correctamente a {alumno._nombre_completo}.")
@@ -252,7 +268,6 @@ class SistemaGestionSGA:
             print(" [Aviso] No hay acciones recientes de registro de notas para deshacer.")
             return
 
-        # Sacar el último elemento de la pila (LIFO)
         cedula, nota_removida = self.pila_acciones_notas.pop()
         alumno = next((a for a in self.alumnos if a._cedula == cedula), None)
 
@@ -261,23 +276,20 @@ class SistemaGestionSGA:
             self.guardar_alumnos()
             print(f" [ÉXITO - Deshacer] Se removió la nota {nota_removida} del alumno {alumno._nombre_completo} ({cedula}).")
         else:
-            print(" [ERROR] No se pudo sincronizar la acción deshacer con los registros actual de alumnos.")
+            print(" [ERROR] No se pudo sincronizar la acción deshacer con los registros actuales.")
 
     def generar_cola_certificados(self):
         print("\n--- 5. Generar Cola de Certificados (FIFO) ---")
-        # Asegurar lectura fresca del archivo
         self.cargar_datos()
 
         cola_graduandos = deque()
 
-        # Analizar alumnos que aprueban
         for alumno in self.alumnos:
             if alumno.esta_aprobado():
                 cola_graduandos.append(alumno)
 
         total_graduandos = len(cola_graduandos)
 
-        # Generar reporte de salida
         with open("certificados_pendientes.txt", "w", encoding="utf-8") as f:
             f.write("=========================================\n")
             f.write("REPORTE DE CERTIFICADOS PENDIENTES\n")
@@ -285,7 +297,6 @@ class SistemaGestionSGA:
             f.write(f"Total de graduandos en cola: {total_graduandos}\n")
 
             contador = 1
-            # Procesar la COLA en orden FIFO
             while cola_graduandos:
                 graduando = cola_graduandos.popleft()
                 prog_nombre = graduando.programa_academico.nombre_programa
