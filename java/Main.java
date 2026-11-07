@@ -25,7 +25,8 @@ class Curso extends ProgramaAcademico {
 
     @Override
     public boolean evaluarAprobacion(List<Double> notas) {
-        if (notas == null || notas.isEmpty()) return false;
+        // Exige obligatoriamente las 3 notas completas para aprobar
+        if (notas == null || notas.size() < 3) return false;
         double suma = 0;
         for (double n : notas) suma += n;
         double promedio = suma / notas.size();
@@ -40,7 +41,8 @@ class Diplomado extends ProgramaAcademico {
 
     @Override
     public boolean evaluarAprobacion(List<Double> notas) {
-        if (notas == null || notas.isEmpty()) return false;
+        // Exige obligatoriamente las 3 notas completas para aprobar
+        if (notas == null || notas.size() < 3) return false;
         double suma = 0;
         for (double n : notas) suma += n;
         double promedio = suma / notas.size();
@@ -55,9 +57,10 @@ class Bootcamp extends ProgramaAcademico {
 
     @Override
     public boolean evaluarAprobacion(List<Double> notas) {
-        if (notas == null || notas.isEmpty()) return false;
+        // Exige obligatoriamente las 3 notas completas y ninguna menor a 14
+        if (notas == null || notas.size() < 3) return false;
         for (double n : notas) {
-            if (n < 14.0) return false; // Ninguna nota individual < 14
+            if (n < 14.0) return false; 
         }
         return true;
     }
